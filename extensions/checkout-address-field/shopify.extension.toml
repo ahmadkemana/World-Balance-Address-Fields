@@ -1,0 +1,159 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/api/checkout-extensions/checkout/configuration
+
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
+api_version = "2024-10"
+
+[[extensions]]
+type = "ui_extension"
+name = "Checkout Address +"
+handle = "checkout-address-field"
+
+# Controls where in Shopify your extension will be injected,
+# and the file that contains your extension’s source code. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/extension-targets-overview
+
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.checkout.delivery-address.render-after"
+[extensions.capabilities]
+block_progress = true
+
+# Gives your extension access to make external network calls, using the
+# JavaScript `fetch()` API. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#network-access
+network_access = true
+api_access = true
+
+
+# Gives your extension access to make external network calls, using the
+# JavaScript `fetch()` API. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#network-access
+# network_access = true
+
+# Loads metafields on checkout resources, including the cart,
+# products, customers, and more. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#metafields
+
+# [[extensions.metafields]]
+# namespace = "address_field"
+# key = "code_AC"
+
+
+# Defines settings that will be collected from merchants installing
+# your extension. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/unstable/configuration#settings-definition
+
+[extensions.settings]
+[[extensions.settings.fields]]
+key = "city_field"
+type = "single_line_text_field"
+name = "City field"
+
+[[extensions.settings.fields.validations]]
+name = "choices"
+value = "[\"Yes\", \"No\"]"
+
+[[extensions.settings.fields]]
+key = "district_field"
+type = "single_line_text_field"
+name = "District field"
+
+[[extensions.settings.fields.validations]]
+name = "choices"
+value = "[\"Yes\", \"No\"]"
+
+[[extensions.settings.fields]]
+key = "subdistrict_field"
+type = "single_line_text_field"
+name = "Subdistrict field"
+
+[[extensions.settings.fields.validations]]
+name = "choices"
+value = "[\"Yes\", \"No\"]"
+
+[[extensions.settings.fields]]
+key = "country_code"
+type = "single_line_text_field"
+name = "Country code"
+
+[[extensions.settings.fields]]
+key = "addresses_file_url"
+type = "single_line_text_field"
+name = "Addresses File URL"
+
+[[extensions.settings.fields]]
+key = "label_city_ENG"
+type = "single_line_text_field"
+name = "City Label (English)"
+
+[[extensions.settings.fields]]
+key = "label_city_translated"
+type = "single_line_text_field"
+name = "City Label (Translated)"
+
+[[extensions.settings.fields]]
+key = "validation_message_city_ENG"
+type = "single_line_text_field"
+name = "City Validation Message (English)"
+
+[[extensions.settings.fields]]
+key = "validation_message_city_translated"
+type = "single_line_text_field"
+name = "City Validation Message (Translated)"
+
+[[extensions.settings.fields]]
+key = "target_save_note_key_for_city"
+type = "single_line_text_field"
+name = "Target Save Note Key For City"
+
+[[extensions.settings.fields]]
+key = "label_district_ENG"
+type = "single_line_text_field"
+name = "District Label (English)"
+
+[[extensions.settings.fields]]
+key = "label_district_translated"
+type = "single_line_text_field"
+name = "District Label (Translated)"
+
+[[extensions.settings.fields]]
+key = "validation_message_district_ENG"
+type = "single_line_text_field"
+name = "District Validation Message (English)"
+
+[[extensions.settings.fields]]
+key = "validation_message_district_translated"
+type = "single_line_text_field"
+name = "District Validation Message (Translated)"
+
+[[extensions.settings.fields]]
+key = "target_save_note_key_for_district"
+type = "single_line_text_field"
+name = "Target Save Note Key For District"
+
+[[extensions.settings.fields]]
+key = "label_subdistrict_ENG"
+type = "single_line_text_field"
+name = "Subdistrict Label (English)"
+
+[[extensions.settings.fields]]
+key = "label_subdistrict_translated"
+type = "single_line_text_field"
+name = "Subdistrict Label (Translated)"
+
+[[extensions.settings.fields]]
+key = "validation_message_subdistrict_ENG"
+type = "single_line_text_field"
+name = "Subdistrict Validation Message (English)"
+
+[[extensions.settings.fields]]
+key = "validation_message_subdistrict_translated"
+type = "single_line_text_field"
+name = "Subdistrict Validation Message (Translated)"
+
+[[extensions.settings.fields]]
+key = "target_save_note_key_for_subdistrict"
+type = "single_line_text_field"
+name = "Target Save Note Key For Subdistrict"

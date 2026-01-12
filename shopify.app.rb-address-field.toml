@@ -1,0 +1,29 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "6b01a2987895ea203a02a76e6bafcc76"
+name = "RB Address Field"
+handle = "rb-address-field"
+application_url = "https://phpstack-362288-4487620.cloudwaysapps.com/"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+dev_store_url = "ahmadkemana.myshopify.com"
+include_config_on_deploy = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_customers,read_discounts,read_orders,read_products,read_script_tags,write_customers,write_discounts,write_orders,write_products,write_script_tags"
+
+[auth]
+redirect_urls = [
+  "https://phpstack-362288-4487620.cloudwaysapps.com/auth/callback",
+  "https://phpstack-362288-4487620.cloudwaysapps.com/auth/shopify/callback",
+  "https://phpstack-362288-4487620.cloudwaysapps.com/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-04"
+
+[pos]
+embedded = false
