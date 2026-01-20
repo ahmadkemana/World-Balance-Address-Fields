@@ -1,45 +1,43 @@
-import "@shopify/ui-extensions/preact";
-import {render} from "preact";
-import {useEffect, useState} from "preact/hooks";
+import '@shopify/ui-extensions/preact';
+import {render} from 'preact';
+import {useEffect, useState} from 'preact/hooks';
+import {
+  useAttributeValues,
+} from '@shopify/ui-extensions/checkout/preact';
 
-// Checkout will call this default export
+// Export the extension
 export default function extension() {
   render(<Extension />, document.body);
 }
 
 function Extension() {
+  console.log("Extension component initialized");
+
   // All Checkout APIs come from the global `shopify` object.
-  // Many of these are Preact Signals: use `.value` to read them.
   const {
     settings,
     shippingAddress,
-    language,
     buyerJourney,
-    extensionCapabilities,
-    attributeValues,
     applyAttributeChange,
     applyShippingAddressChange,
   } = shopify;
 
-  // --- Derive initial values from signals ---
+  const extensionCapabilities = shopify.extension?.capabilities;
 
+  // Derive initial values from signals
   const settingsValue = settings.value ?? {};
   const address = shippingAddress.value ?? {};
-  const languageValue = language.value ?? {};
-
-  const [
-    defaultRegionSignal,
-    defaultZipcodeSignal,
-    attDistrictSignal,
-  ] = attributeValues.value([
-    settingsValue.target_save_note_key_for_Region || "Region",
-    settingsValue.target_save_note_key_for_zipcode || "Zip Code",
-    settingsValue.target_save_note_key_for_district || "District",
+  const languageValue = { isoCode: "en" };
+ 
+  const [defaultRegionSignal, defaultZipcodeSignal, attDistrictSignal] = useAttributeValues([
+    `${settingsValue.target_save_note_key_for_Region || "Region"}`,
+    `${settingsValue.target_save_note_key_for_zipcode || "Zip Code"}`,
+    `${settingsValue.target_save_note_key_for_district || "District"}`,
   ]);
 
-  const defaultRegion = defaultRegionSignal?.value || "";
-  const defaultZipcode = defaultZipcodeSignal?.value || "";
-  const attDisrict = attDistrictSignal?.value || "";
+  const defaultRegion = defaultRegionSignal || "";
+  const defaultZipcode = defaultZipcodeSignal || "";
+  const attDisrict = attDistrictSignal || "";
 
   const defaultCity = address.city || "";
   const defaultDistrict =
@@ -47,12 +45,21 @@ function Extension() {
       ? address.address2.split(",").pop().trim()
       : attDisrict || "";
 
-  const canBlockProgress = extensionCapabilities.value?.includes(
-    "block_progress",
-  );
+  const canBlockProgress = extensionCapabilities.value?.includes("block_progress");
 
-  // --- Local component state ---
+  console.log("Initial values derived:", {
+    settingsValue,
+    address,
+    languageValue,
+    defaultRegion,
+    defaultZipcode,
+    attDisrict,
+    defaultCity,
+    defaultDistrict,
+    canBlockProgress,
+  });
 
+  // Local component state
   const [data, setData] = useState([]);
   const [regions, setRegions] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState(
@@ -76,11 +83,13 @@ function Extension() {
   const [loading, setLoading] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
-  // --- Buyer journey blocking logic (intercept) ---
-
+  // Buyer journey blocking logic (intercept)
   useEffect(() => {
-    // register intercept once
-    const unsubscribe = buyerJourney.intercept(({canBlockProgress}) => {
+    console.log("Setting up buyer journey intercept");
+    let unsubscribe;
+    buyerJourney.intercept(({canBlockProgress}) => {
+      console.log("Buyer journey intercept triggered", { canBlockProgress, selectedRegion, regionsLength: regions?.length });
+      
       if (canBlockProgress && selectedRegion === "" && regions?.length > 0) {
         return {
           behavior: "block",
@@ -89,9 +98,7 @@ function Extension() {
             if (result.behavior === "block") {
               setSelectedRegionErr("Region is required");
               setSelectedCityErr("Please enter the City of the address");
-              setSelectedDistrictErr(
-                "Please enter the Barangay of the address",
-              );
+              setSelectedDistrictErr("Please enter the Barangay of the address");
               setSelectedzipcodeErr("Zip Code as parameter is required");
             }
           },
@@ -107,8 +114,7 @@ function Extension() {
           errors: [
             {
               message: "Region does not match the selected location",
-              target:
-                "$.cart.deliveryGroups[0].deliveryAddress.provinceCode",
+              target: "$.cart.deliveryGroups[0].deliveryAddress.provinceCode",
             },
           ],
         };
@@ -121,9 +127,7 @@ function Extension() {
           perform: (result) => {
             if (result.behavior === "block") {
               setSelectedCityErr("Please enter the City of the address");
-              setSelectedDistrictErr(
-                "Please enter the Barangay of the address",
-              );
+              setSelectedDistrictErr("Please enter the Barangay of the address");
               setSelectedzipcodeErr("Zip Code as parameter is required");
             }
           },
@@ -151,9 +155,7 @@ function Extension() {
           reason: "Please enter the Barangay of the address",
           perform: (result) => {
             if (result.behavior === "block") {
-              setSelectedDistrictErr(
-                "Please enter the Barangay of the address",
-              );
+              setSelectedDistrictErr("Please enter the Barangay of the address");
               setSelectedzipcodeErr("Zip Code as parameter is required");
             }
           },
@@ -193,6 +195,8 @@ function Extension() {
           clearValidationError();
         },
       };
+    }).then((fn) => {
+      unsubscribe = fn;
     });
 
     return () => {
@@ -219,15 +223,17 @@ function Extension() {
     setSelectedzipcodeErr("");
   }
 
-  // --- Load region/city/district data ---
-
+  // Load region/city/district data
   useEffect(() => {
+    console.log("Loading data useEffect triggered", { addresses_file_url: settingsValue.addresses_file_url, countryCode: address.countryCode });
     if (!settingsValue.addresses_file_url || !address.countryCode) return;
     setLoading(true);
-
-    fetch(settingsValue.addresses_file_url)
+    console.log("Fetching data from:", settingsValue.addresses_file_url);
+    const addressFileUrl = `${settingsValue.addresses_file_url}`;
+    fetch(addressFileUrl)
       .then((response) => response.json())
       .then((jsonData) => {
+        console.log("Data fetched successfully, filtering for country:", address.countryCode);
         const filteredData = jsonData?.filter(
           (item) => item?.country_id === address.countryCode,
         );
@@ -254,6 +260,7 @@ function Extension() {
           address.provinceCode || defaultRegion || sortedRegions[0]?.value || "",
         );
         setInitialLoadComplete(true);
+        console.log("Data loading complete", { regionsCount: sortedRegions.length, selectedRegion: address.provinceCode || defaultRegion || sortedRegions[0]?.value || "" });
       })
       .catch((error) => {
         console.error("Error fetching data:", error);
@@ -263,6 +270,7 @@ function Extension() {
 
   // When region changes, update cities and reset dependent fields
   useEffect(() => {
+    console.log("Region change useEffect triggered", { selectedRegion, dataLength: data?.length });
     if (selectedRegion && data?.length > 0) {
       const regionCities = data
         ?.filter(
@@ -287,6 +295,7 @@ function Extension() {
       setSelectedzipcodeErr("");
       setSelectedZipcode("");
       setDistricts([]);
+      console.log("Cities updated for region", { citiesCount: sortedCities.length, selectedCity: regionCities?.includes(defaultCity) ? defaultCity : "" });
     } else {
       setCities([]);
       setSelectedCity("");
@@ -296,11 +305,13 @@ function Extension() {
       setSelectedzipcodeErr("");
       setSelectedZipcode("");
       setDistricts([]);
+      console.log("Region cleared, resetting cities and districts");
     }
   }, [selectedRegion, data, defaultCity]);
 
   // When city changes, update districts and reset dependent fields
   useEffect(() => {
+    console.log("City change useEffect triggered", { selectedCity, selectedRegion, dataLength: data?.length });
     if (selectedCity && selectedRegion && data?.length > 0) {
       const cityDistricts = data
         ?.filter(
@@ -322,12 +333,14 @@ function Extension() {
       setSelectedDistrictErr("");
       setSelectedzipcodeErr("");
       setSelectedZipcode(selectedDistrict || "");
+      console.log("Districts updated for city", { districtsCount: sortedDistricts.length, selectedDistrict: cityDistricts?.includes(defaultDistrict) ? defaultDistrict : "" });
     } else {
       setDistricts([]);
       setSelectedDistrict("");
       setSelectedDistrictErr("");
       setSelectedzipcodeErr("");
       setSelectedZipcode("");
+      console.log("City cleared, resetting districts and zipcode");
     }
   }, [selectedCity, selectedRegion, data, defaultDistrict, selectedDistrict]);
 
@@ -417,37 +430,45 @@ function Extension() {
     districts,
   ]);
 
-  // --- Event handlers ---
-
-  const handleRegionChange = (value) => {
+  // Event handlers
+  const handleRegionChange = (event) => {
+    const value = event.target.value;
+    console.log("Region changed to:", value);
     setSelectedRegion(value);
     setSelectedRegionErr("");
   };
 
-  const handleCityChange = (value) => {
+  const handleCityChange = (event) => {
+    const value = event.target.value;
+    console.log("City changed to:", value);
     setSelectedCity(value);
     setSelectedCityErr("");
   };
 
-  const handleDistrictChange = (value) => {
+  const handleDistrictChange = (event) => {
+    const value = event.target.value;
+    console.log("District changed to:", value);
     setSelectedDistrict(value);
     setSelectedDistrictErr("");
   };
 
-  const handleZipcodeChange = (value) => {
+  const handleZipcodeChange = (event) => {
+    const value = event.target.value;
+    console.log("Zipcode changed to:", value);
     setSelectedZipcode(value);
     setSelectedzipcodeErr("");
   };
 
-  // --- Apply attribute / shipping address changes ---
-
+  // Apply attribute / shipping address changes
   useEffect(() => {
+    console.log("Applying region changes", { selectedRegion });
     if (selectedRegion) {
       applyAttributeChange({
         type: "updateAttribute",
-        key: settingsValue.target_save_note_key_for_Region || "Region",
+        key: `${settingsValue.target_save_note_key_for_Region || "Region"}`,
         value: selectedRegion,
       });
+      console.log("Applied region attribute change");
 
       if (selectedRegion !== address.provinceCode) {
         applyShippingAddressChange({
@@ -459,6 +480,7 @@ function Extension() {
             zip: "",
           },
         });
+        console.log("Applied region shipping address change");
       }
     }
   }, [
@@ -470,12 +492,14 @@ function Extension() {
   ]);
 
   useEffect(() => {
+    console.log("Applying city changes", { selectedCity });
     if (selectedCity && selectedCity !== address.city) {
       applyAttributeChange({
         type: "updateAttribute",
-        key: settingsValue.target_save_note_key_for_city || "City",
+        key: `${settingsValue.target_save_note_key_for_city || "City"}`,
         value: selectedCity,
       });
+      console.log("Applied city attribute change");
 
       applyShippingAddressChange({
         type: "updateShippingAddress",
@@ -484,6 +508,7 @@ function Extension() {
           city: selectedCity,
         },
       });
+      console.log("Applied city shipping address change");
     }
   }, [
     selectedCity,
@@ -494,6 +519,7 @@ function Extension() {
   ]);
 
   useEffect(() => {
+    console.log("Applying district changes", { selectedDistrict });
     if (selectedDistrict) {
       let baseAddress2 = address.address2 || "";
       if (baseAddress2.includes(",")) {
@@ -514,12 +540,14 @@ function Extension() {
           address2: fullAddress2,
         },
       });
+      console.log("Applied district shipping address change");
 
       applyAttributeChange({
         type: "updateAttribute",
-        key: settingsValue.target_save_note_key_for_district || "District",
+        key: `${settingsValue.target_save_note_key_for_district || "District"}`,
         value: selectedDistrict,
       });
+      console.log("Applied district attribute change");
     }
   }, [
     selectedDistrict,
@@ -530,12 +558,14 @@ function Extension() {
   ]);
 
   useEffect(() => {
+    console.log("Applying zipcode changes", { selectedZipcode });
     if (selectedZipcode) {
       applyAttributeChange({
         type: "updateAttribute",
-        key: settingsValue.target_save_note_key_for_zipcode || "Zip Code",
+        key: `${settingsValue.target_save_note_key_for_zipcode || "Zip Code"}`,
         value: selectedZipcode,
       });
+      console.log("Applied zipcode attribute change");
 
       if (selectedZipcode !== address.zip) {
         applyShippingAddressChange({
@@ -545,6 +575,7 @@ function Extension() {
             zip: selectedZipcode,
           },
         });
+        console.log("Applied zipcode shipping address change");
       }
     }
   }, [
@@ -555,8 +586,7 @@ function Extension() {
     applyShippingAddressChange,
   ]);
 
-  // --- UI: Polaris web components (JSX) ---
-
+  // UI: Polaris web components (JSX)
   const isEnglish =
     languageValue.isoCode === "en" ||
     languageValue.isoCode === `en-${settingsValue.country_code}`;
@@ -592,6 +622,8 @@ function Extension() {
       ? "Zip Code"
       : settingsValue.label_zipcode_ENG || "Zip Code";
 
+  console.log("rendering checkout address field extension");
+  
   return (
     <s-box border="none">
       <s-stack direction="block" gap="base">
@@ -615,50 +647,56 @@ function Extension() {
         ) : (
           <s-stack direction="block" gap="base">
             <s-select
-              label={regionLabel}
+              label={`${regionLabel}`}
               value={selectedRegion}
               required={canBlockProgress}
               error={selectedRegionErr}
-              onChange={(value) => handleRegionChange(value)}
+              onChange={handleRegionChange}
             >
               {regions?.map((region) => (
-                <s-option value={region.value}>{region.label}</s-option>
+                <s-option key={region.value} value={region.value}>
+                  {region.label}
+                </s-option>
               ))}
             </s-select>
 
             <s-select
-              label={cityLabel}
+              label={`${cityLabel}`}
               value={selectedCity}
               required={canBlockProgress}
               error={selectedCityErr}
               disabled={!selectedRegion || cities.length === 0}
-              onChange={(value) => handleCityChange(value)}
+              onChange={handleCityChange}
             >
               {cities?.map((city) => (
-                <s-option value={city}>{city}</s-option>
+                <s-option key={city} value={city}>
+                  {city}
+                </s-option>
               ))}
             </s-select>
 
             <s-select
-              label={districtLabel}
+              label={`${districtLabel}`}
               value={selectedDistrict}
               required={canBlockProgress}
               error={selectedDistrictErr}
               disabled={!selectedCity || districts.length === 0}
-              onChange={(value) => handleDistrictChange(value)}
+              onChange={handleDistrictChange}
             >
               {districts?.map((district) => (
-                <s-option value={district}>{district}</s-option>
+                <s-option key={district} value={district}>
+                  {district}
+                </s-option>
               ))}
             </s-select>
 
             <s-text-field
-              label={zipcodeLabel}
+              label={`${zipcodeLabel}`}
               value={selectedZipcode}
               required={canBlockProgress}
               error={selectedzipcodeErr}
               disabled
-              onChange={(value) => handleZipcodeChange(value)}
+              onChange={handleZipcodeChange}
             />
           </s-stack>
         )}

@@ -1,17 +1,24 @@
+# Learn more about configuring your checkout UI extension:
+# https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
 
+# The version of APIs your extension will receive. Learn more:
+# https://shopify.dev/docs/api/usage/versioning
 api_version = "2025-10"
 
 [[extensions]]
-
-uid = "83cc8ae9-211f-e46d-144b-da561d6afa7232396926"
-
+name = "Checkout Fields"
+handle = "checkout-fields"
 type = "ui_extension"
-name = "Checkout Address +"
-handle = "checkout-address-field"
+uid = "914da4f3-b78e-a869-6db4-7a34f741f346011d6bc7"
+
+# Controls where in Shopify your extension will be injected,
+# and the file that contains your extension’s source code. Learn more:
+# https://shopify.dev/docs/api/checkout-ui-extensions/latest/extension-targets-overview
 
 [[extensions.targeting]]
 module = "./src/Checkout.jsx"
 target = "purchase.checkout.block.render"
+
 [extensions.capabilities]
 block_progress = true
 
