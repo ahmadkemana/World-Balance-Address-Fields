@@ -72,11 +72,19 @@ function Extension() {
             console.log("Blocking: Region does not match");
             return {
                 behavior: "block",
-                reason: "Region does not match the selected location",
+                reason: "Region doesn’t match the selected location.",
                 errors: [
                     {
-                        message: "Region does not match the selected location", 
+                        message: "Region doesn’t match the selected location.", 
                         target: "$.cart.deliveryGroups[0].deliveryAddress.provinceCode",
+                    },
+                     {
+                        message: "City doesn’t match the selected location.", 
+                        target: "$.cart.deliveryGroups[0].deliveryAddress.city",
+                    }, 
+                    {
+                        message: "ZIP Code doesn’t match the selected location.", 
+                        target: "$.cart.deliveryGroups[0].deliveryAddress.zip",
                     }
                 ],
             };
@@ -95,11 +103,15 @@ function Extension() {
             console.log("Blocking: City does not match", { selectedCity, addressCity: address?.city });
             return {
                 behavior: "block",
-                reason: "City does not match the selected location",
+                reason: "City doesn’t match the selected location.",
                 errors: [
                     {
-                        message: "City does not match the selected location", 
+                        message: "City doesn’t match the selected location.", 
                         target: "$.cart.deliveryGroups[0].deliveryAddress.city",
+                    }, 
+                    {
+                        message: "ZIP Code doesn’t match the selected location.", 
+                        target: "$.cart.deliveryGroups[0].deliveryAddress.zip",
                     }
                 ],
             };
@@ -130,10 +142,10 @@ function Extension() {
             console.log("Blocking: Zipcode does not match", { selectedZipcode, addressZip: address?.zip });
             return {
                 behavior: "block",
-                reason: "Zip code does not match the selected location",
+                reason: "ZIP Code doesn’t match the selected location.",
                 errors: [
                     {
-                        message: "Zip code does not match the selected location", 
+                        message: "ZIP Code doesn’t match the selected location.", 
                         target: "$.cart.deliveryGroups[0].deliveryAddress.zip",
                     }
                 ],
@@ -283,18 +295,18 @@ function Extension() {
     }, [selectedDistrict, selectedCity, selectedRegion, data]);
 
     // Extract district from address2 if it contains comma
-    useEffect(() => {
-        if (address?.address2 && address?.address2?.includes(",") && !selectedDistrict) {
-            const parts = address?.address2?.split(",").map((val) => val?.trim());
+    // useEffect(() => {
+    //     if (address?.address2 && address?.address2?.includes(",") && !selectedDistrict) {
+    //         const parts = address?.address2?.split(",").map((val) => val?.trim());
             
-            Promise.resolve().then(() => {
-                if (parts[parts.length - 1]) {
+    //         Promise.resolve().then(() => {
+    //             if (parts[parts.length - 1]) {
 
-                    setSelectedDistrict(parts[parts.length - 1]);
-                }
-            });
-        }
-    }, [address?.address2]);
+    //                 setSelectedDistrict(parts[parts.length - 1]);
+    //             }
+    //         });
+    //     }
+    // }, [address?.address2]);
 
     // Set city from address.city
     useEffect(() => {
@@ -328,13 +340,13 @@ function Extension() {
                     location?.zipcode === address?.zip
             );
 
-            if (matchingLocations?.length > 0) {
-                // Get the first district from matching locations
-                const firstDistrict = matchingLocations[0]?.district;
-                if (firstDistrict && districts?.includes(firstDistrict)) {
-                    setSelectedDistrict(firstDistrict);
-                }
-            }
+            // if (matchingLocations?.length > 0) {
+            //     // Get the first district from matching locations
+            //     const firstDistrict = matchingLocations[0]?.district;
+            //     if (firstDistrict && districts?.includes(firstDistrict)) {
+            //         setSelectedDistrict(firstDistrict);
+            //     }
+            // }
         }
     }, [initialLoadComplete, data, address?.city, address?.address2, address?.zip, address?.provinceCode, attDisrict, selectedRegion, selectedCity, selectedDistrict, districts]);
 
@@ -414,14 +426,14 @@ function Extension() {
             }
             
             // Concatenate district to address2
-            const fullAddress2 = baseAddress2 + (selectedDistrict ? `, ${selectedDistrict}` : "");
-            ApplyShippingAddressChange({
-                type: "updateShippingAddress",
-                address: {
-                    ...address,
-                    address2: fullAddress2,
-                },
-            });
+            // const fullAddress2 = baseAddress2 + (selectedDistrict ? `, ${selectedDistrict}` : "");
+            // ApplyShippingAddressChange({
+            //     type: "updateShippingAddress",
+            //     address: {
+            //         ...address,
+            //         address2: fullAddress2,
+            //     },
+            // });
 
             applyAttributeChange({
                 type: "updateAttribute",
@@ -438,8 +450,7 @@ function Extension() {
                 key: `${settings?.target_save_note_key_for_zipcode || "Zip Code"}`,
                 value: selectedZipcode,
             });
-        if(selectedZipcode != address?.zip) {
-            console.log('address?.address2', address?.address2);
+        if(selectedZipcode != address?.zip) { 
 
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
@@ -450,7 +461,7 @@ function Extension() {
             });
         }
         }
-    }, [address?.address2]);
+    }, [selectedDistrict, selectedZipcode]);
     return (
         <s-box border="none">
             <s-stack direction="block" gap="base">
