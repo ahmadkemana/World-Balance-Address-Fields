@@ -7,6 +7,7 @@ import {
     useApplyAttributeChange,
     useApplyShippingAddressChange,
     useShippingAddress,
+    useDeliveryGroups,
     useLanguage,
     useBuyerJourneyIntercept,
     useExtensionCapability,
@@ -38,9 +39,27 @@ function parseAddressCity(cityField) {
 
 function Extension() {
     const address = useShippingAddress();
+    const deliveryGroups = useDeliveryGroups();
     const applyAttributeChange = useApplyAttributeChange();
     const ApplyShippingAddressChange = useApplyShippingAddressChange();
     const settings = useSettings();
+
+    /**
+     * Dynamically resolve which delivery group index is currently active by
+     * matching its deliveryAddress against the current shipping address.
+     * This replaces every hardcoded [0] so errors always point at the right group.
+     * Falls back to 0 if no match is found.
+     */
+    const activeDeliveryGroupIndex = (() => {
+        if (!deliveryGroups?.length) return 0;
+        const idx = deliveryGroups.findIndex(
+            (g) =>
+                g?.deliveryAddress?.provinceCode === address?.provinceCode &&
+                g?.deliveryAddress?.zip === address?.zip
+        );
+        return idx !== -1 ? idx : 0;
+    })();
+
 
     const blockTitle = settings?.block_title || "Address Fields";
     const regionLabel = settings?.region_label || "Region";
@@ -64,18 +83,83 @@ function Extension() {
     const [selectedZipcode, setSelectedZipcode] = useState("");
     const [selectedZipcodeErr, setSelectedZipcodeErr] = useState("");
 
-    const [loading, setLoading] = useState(false); 
+    const [loading, setLoading] = useState(false);
+
     /**
-     * userAction refs track whether a dropdown change was triggered by the USER
-     * (vs programmatic initialization). This prevents resetting child fields
-     * during initial load.
+     * Track the last values WE applied to Shopify so we can distinguish
+     * between "address changed because we updated it" vs "user selected a
+     * different saved address".
      */
-    const userChangedRegion = useRef(false);
-    const userChangedCity = useRef(false);
-    // Flag: set once data has loaded and initial values have been restored
-    const isInitialized = useRef(false);
+    const lastAppliedProvince = useRef("");
+    const lastAppliedCity = useRef("");
+    const lastAppliedZip = useRef("");
+
+    /**
+     * When true, the next region/city/district useEffect cascade should
+     * restore from the current address instead of resetting child fields.
+     */
+    const isRestoringFromAddress = useRef(false);
 
     const canBlockProgress = useExtensionCapability("block_progress");
+
+    // ─── Helper: restore all dropdowns from a given address object ───────────
+    /**
+     * Populates region/city/district/zipcode from an address object using
+     * the already-loaded `data` array. Called on first load AND whenever the
+     * user selects a different saved address.
+     */
+    const restoreFromAddress = (addr, loadedData) => {
+        if (!addr) return;
+
+        isRestoringFromAddress.current = true;
+
+        const province = addr.provinceCode || "";
+        const { city: parsedCity, district: parsedDistrict } = parseAddressCity(addr.city || "");
+        const zip = addr.zip || "";
+
+        // --- Regions (already set by the load effect, but be safe) ---
+        setSelectedRegion(province);
+
+        if (province && loadedData.length > 0) {
+            // Cities for this region
+            const regionData = loadedData.filter(
+                (loc) => loc?.region_code === province || loc?.Region === province
+            );
+            const sortedCities = [...new Set(regionData.map((loc) => loc?.city))].sort((a, b) =>
+                a.localeCompare(b)
+            );
+            setCities(sortedCities);
+            setSelectedCity(parsedCity);
+
+            if (parsedCity) {
+                // Districts for this city
+                const cityData = regionData.filter((loc) => loc?.city === parsedCity);
+                const sortedDistricts = [...new Set(cityData.map((loc) => loc?.district))].sort(
+                    (a, b) => a.localeCompare(b)
+                );
+                setDistricts(sortedDistricts);
+                setSelectedDistrict(parsedDistrict);
+            } else {
+                setDistricts([]);
+                setSelectedDistrict("");
+            }
+        } else {
+            setCities([]);
+            setSelectedCity("");
+            setDistricts([]);
+            setSelectedDistrict("");
+        }
+
+        setSelectedZipcode(zip);
+
+        // Clear all errors on address switch
+        setSelectedRegionErr("");
+        setSelectedCityErr("");
+        setSelectedDistrictErr("");
+        setSelectedZipcodeErr("");
+
+        console.log("[restore] province:", province, "city:", parsedCity, "district:", parsedDistrict, "zip:", zip);
+    };
 
     // ─── Intercept / Validation ──────────────────────────────────────────────
     useBuyerJourneyIntercept(({ canBlockProgress }) => {
@@ -91,21 +175,22 @@ function Extension() {
         }
 
         if (selectedRegion && selectedRegion !== address?.provinceCode) {
+            const dg = `$.cart.deliveryGroups[${activeDeliveryGroupIndex}].deliveryAddress`;
             return {
                 behavior: "block",
                 reason: "Region doesn't match the selected location.",
                 errors: [
                     {
                         message: "Region doesn't match the selected location.",
-                        target: "$.cart.deliveryGroups[0].deliveryAddress.provinceCode",
+                        target: `${dg}.provinceCode`,
                     },
                     {
                         message: "City doesn't match the selected location.",
-                        target: "$.cart.deliveryGroups[0].deliveryAddress.city",
+                        target: `${dg}.city`,
                     },
                     {
                         message: "ZIP Code doesn't match the selected location.",
-                        target: "$.cart.deliveryGroups[0].deliveryAddress.zip",
+                        target: `${dg}.zip`,
                     },
                 ],
             };
@@ -138,8 +223,8 @@ function Extension() {
                     reason: "Address city doesn't match the selected location.",
                     errors: [
                         {
-                            message: "City doesn’t match the selected location.",
-                            target: "$.cart.deliveryGroups[0].deliveryAddress.city",
+                            message: "City doesn't match the selected location.",
+                            target: `$.cart.deliveryGroups[${activeDeliveryGroupIndex}].deliveryAddress.city`,
                         },
                     ],
                 };
@@ -159,7 +244,7 @@ function Extension() {
                 errors: [
                     {
                         message: "ZIP Code doesn't match the selected location.",
-                        target: "$.cart.deliveryGroups[0].deliveryAddress.zip",
+                        target: `$.cart.deliveryGroups[${activeDeliveryGroupIndex}].deliveryAddress.zip`,
                     },
                 ],
             };
@@ -200,28 +285,136 @@ function Extension() {
                 setRegions(uniqueRegions);
                 setLoading(false);
 
-                // Initialize region from existing address (no user action)
-                if (address?.provinceCode) {
-                    userChangedRegion.current = false;
-                    setSelectedRegion(address.provinceCode);
-                }
+                // Restore from current address on first load
+                restoreFromAddress(address, filteredData);
+
+                // Record what Shopify currently has so we can detect future external changes
+                lastAppliedProvince.current = address?.provinceCode || "";
+                lastAppliedCity.current = address?.city || "";
+                lastAppliedZip.current = address?.zip || "";
             })
             .catch((err) => {
                 console.error("Error fetching address data:", err);
                 setLoading(false);
             });
+    // Only re-run when the data source or country changes (not on every address update)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [settings?.addresses_file_url, address?.countryCode]);
+
+    // ─── Detect external address change (user selected a different saved address)
+    useEffect(() => {
+        // Skip if data hasn't loaded yet
+        if (data.length === 0) return;
+
+        const incomingProvince = address?.provinceCode || "";
+        const incomingCity = address?.city || "";
+        const incomingZip = address?.zip || "";
+
+        // If the incoming address matches what we last applied, this change
+        // was caused by our own code — ignore it.
+        const weChangedIt =
+            incomingProvince === lastAppliedProvince.current &&
+            incomingCity === lastAppliedCity.current &&
+            incomingZip === lastAppliedZip.current;
+
+        if (weChangedIt) return;
+
+        // The address changed externally (saved-address switch or manual edit)
+        console.log("[address-change] Detected external address change → re-syncing dropdowns");
+        restoreFromAddress(address, data);
+
+        // Update our "last applied" snapshot
+        lastAppliedProvince.current = incomingProvince;
+        lastAppliedCity.current = incomingCity;
+        lastAppliedZip.current = incomingZip;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [address?.provinceCode, address?.city, address?.zip]);
+
+    // ─── Side effects: sync selections → Shopify address ────────────────────
+
+    // Sync region → Shopify (only when NOT restoring)
+    useEffect(() => {
+        if (!selectedRegion) return;
+        if (isRestoringFromAddress.current) return; // skip during restore
+
+        applyAttributeChange({
+            type: "updateAttribute",
+            key: String(settings?.target_save_note_key_for_Region || "Region"),
+            value: selectedRegion,
+        });
+
+        if (selectedRegion !== address?.provinceCode) {
+            const newProvince = selectedRegion;
+            lastAppliedProvince.current = newProvince;
+            lastAppliedCity.current = "";
+            lastAppliedZip.current = "";
+
+            ApplyShippingAddressChange({
+                type: "updateShippingAddress",
+                address: {
+                    ...address,
+                    provinceCode: newProvince,
+                    city: "",
+                    zip: "",
+                },
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedRegion]);
+
+    // Sync zipcode → Shopify (only when NOT restoring)
+    useEffect(() => {
+        if (!selectedZipcode) return;
+        if (isRestoringFromAddress.current) return; // skip during restore
+
+        applyAttributeChange({
+            type: "updateAttribute",
+            key: String(settings?.target_save_note_key_for_zipcode || "Zip Code"),
+            value: selectedZipcode,
+        });
+
+        const fullCity = selectedDistrict
+            ? `${selectedCity}, ${selectedDistrict}`
+            : selectedCity;
+
+        if (selectedZipcode !== address?.zip || fullCity !== address?.city) {
+            lastAppliedZip.current = selectedZipcode;
+            lastAppliedCity.current = fullCity;
+
+            ApplyShippingAddressChange({
+                type: "updateShippingAddress",
+                address: { ...address, zip: selectedZipcode, city: fullCity },
+            });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedZipcode]);
+
+    /**
+     * After restoreFromAddress() has run through all its setState() calls
+     * (which are batched by Preact/React), we need to release the restore lock
+     * so subsequent USER-driven changes are synced to Shopify again.
+     *
+     * We do this in a useEffect that depends on the restored values settling.
+     */
+    useEffect(() => {
+        if (isRestoringFromAddress.current) {
+            // All state from the restore has been applied; release the lock.
+            isRestoringFromAddress.current = false;
+            console.log("[restore] Complete — releasing restore lock");
+        }
+    }, [selectedRegion, selectedCity, selectedDistrict, selectedZipcode]);
 
     // ─── Step 2: When region changes → update cities ──────────────────────────
     useEffect(() => {
+        // During a restore we manage cities ourselves in restoreFromAddress()
+        if (isRestoringFromAddress.current) return;
+
         if (!selectedRegion || data.length === 0) {
             setCities([]);
-            if (userChangedRegion.current) {
-                setSelectedCity("");
-                setSelectedDistrict("");
-                setSelectedZipcode("");
-                setDistricts([]);
-            }
+            setSelectedCity("");
+            setSelectedDistrict("");
+            setSelectedZipcode("");
+            setDistricts([]);
             return;
         }
 
@@ -232,20 +425,25 @@ function Extension() {
         const sortedCities = [...new Set(regionData.map((loc) => loc?.city))].sort(
             (a, b) => a.localeCompare(b)
         );
-             setCities(sortedCities); 
-            const cityFromAddress = parseAddressCity(address?.city || "").city;
-            setSelectedCity(cityFromAddress || "");
-            setSelectedDistrict("");
-            setSelectedZipcode("");
-            setDistricts([]); 
-        console.log("Region changed, updated cities:", selectedRegion);
+        setCities(sortedCities);
+        // User changed region manually — clear dependent fields
+        setSelectedCity("");
+        setSelectedDistrict("");
+        setSelectedZipcode("");
+        setDistricts([]);
+
+        console.log("[region-effect] Updated cities for region:", selectedRegion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedRegion, data]);
 
     // ─── Step 3: When city changes → update districts ─────────────────────────
     useEffect(() => {
-        // Always clear district and zipcode when city changes
+        // During a restore we manage districts ourselves in restoreFromAddress()
+        if (isRestoringFromAddress.current) return;
+
         setSelectedDistrict("");
         setSelectedZipcode("");
+
         if (!selectedCity || !selectedRegion || data.length === 0) {
             setDistricts([]);
             return;
@@ -260,14 +458,14 @@ function Extension() {
             ...new Set(cityData.map((loc) => loc?.district)),
         ].sort((a, b) => a.localeCompare(b));
         setDistricts(sortedDistricts);
-        const districtFromAddress = parseAddressCity(address?.city || "").district;
-        setSelectedDistrict(districtFromAddress || "");
-         console.log("City changed, updated districts:", selectedCity);
 
+        console.log("[city-effect] Updated districts for city:", selectedCity);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCity, selectedRegion, data]);
 
     // ─── Step 4: When district changes → auto-populate zipcode ───────────────
     useEffect(() => {
+        if (isRestoringFromAddress.current) return;
         if (!selectedDistrict || !selectedCity || !selectedRegion || data.length === 0)
             return;
 
@@ -277,61 +475,18 @@ function Extension() {
                 loc?.city === selectedCity &&
                 loc?.district === selectedDistrict
         );
-        if (match?.zipcode) {
-            setSelectedZipcode(match.zipcode);
-        } else {
-            setSelectedZipcode("");
-        } 
-    console.log("District changed to:", selectedDistrict, "auto-populated zipcode:", match?.zipcode);
+
+        const newZip = match?.zipcode || "";
+        setSelectedZipcode(newZip);
+
+        console.log("[district-effect] District:", selectedDistrict, "→ zipcode:", newZip);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDistrict, selectedCity, selectedRegion, data]);
-
-    // ─── Side effects: sync selections → Shopify address ────────────────────
-
-    // Sync region
-    useEffect(() => {
-        if (!selectedRegion) return;
-        applyAttributeChange({
-            type: "updateAttribute",
-            key: String(settings?.target_save_note_key_for_Region || "Region"),
-            value: selectedRegion,
-        });
-        console.log("Region changed, updated address.provinceCode to:", selectedRegion, selectedRegion !== address?.provinceCode);
-        if (selectedRegion !== address?.provinceCode) {
-            ApplyShippingAddressChange({
-                type: "updateShippingAddress",
-                address: {
-                    ...address,
-                    provinceCode: selectedRegion,
-                    city: "",
-                    zip: "",
-                },
-            });
-        }
-    }, [selectedRegion]);
-
-    // Sync zipcode
-    useEffect(() => {
-        if (!selectedZipcode) return;
-        applyAttributeChange({
-            type: "updateAttribute",
-            key: String(settings?.target_save_note_key_for_zipcode || "Zip Code"),
-            value: selectedZipcode,
-        });
-         const fullCity = `${selectedCity}, ${selectedDistrict}`;
-        console.log("Zipcode changed, updated address.zip to:", selectedZipcode, selectedZipcode !== address?.zip);
-        if (selectedZipcode !== address?.zip) {
-            ApplyShippingAddressChange({
-                type: "updateShippingAddress",
-                address: { ...address, zip: selectedZipcode, city: fullCity },
-            });
-        }
-    }, [selectedZipcode]);
 
     // ─── Handlers ─────────────────────────────────────────────────────────────
 
     const handleRegionChange = (event) => {
         const value = event?.target?.value || event;
-        userChangedRegion.current = true; // mark as user action
         setSelectedRegion(value);
         setSelectedRegionErr("");
     };
@@ -339,13 +494,18 @@ function Extension() {
     const handleCityChange = (event) => {
         const value = event?.target?.value || event;
         setSelectedCity(value);
-        setSelectedCityErr(""); 
-        const fullCity = value ? `${value}${selectedDistrict ? `, ${selectedDistrict}` : ""}` : "";
+        setSelectedCityErr("");
+
+        const fullCity = value
+            ? `${value}${selectedDistrict ? `, ${selectedDistrict}` : ""}`
+            : "";
+
         if (fullCity !== address?.city) {
-        ApplyShippingAddressChange({
-            type: "updateShippingAddress",
-            address: { ...address, city: value },
-        });
+            lastAppliedCity.current = fullCity;
+            ApplyShippingAddressChange({
+                type: "updateShippingAddress",
+                address: { ...address, city: value },
+            });
         }
     };
 
@@ -353,10 +513,10 @@ function Extension() {
         const value = event?.target?.value || event;
         setSelectedDistrict(value);
         setSelectedDistrictErr("");
-        console.log("District changed to:", value);
-        // Maintain city and add district next to it using comma separator
+
         if (selectedCity && value) {
             const fullCity = `${selectedCity}, ${value}`;
+            lastAppliedCity.current = fullCity;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: { ...address, city: fullCity },
