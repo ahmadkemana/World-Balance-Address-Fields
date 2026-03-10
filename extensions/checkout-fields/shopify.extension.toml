@@ -6,10 +6,10 @@
 api_version = "2025-10"
 
 [[extensions]]
+uid = "914da4f3-b78e-a869-6db4-7a34f741f346011d6bc7"
+type = "ui_extension"
 name = "Checkout Fields"
 handle = "checkout-fields"
-type = "ui_extension"
-uid = "914da4f3-b78e-a869-6db4-7a34f741f346011d6bc7"
 
 # Controls where in Shopify your extension will be injected,
 # and the file that contains your extension’s source code. Learn more:

@@ -2,31 +2,24 @@ import "@shopify/ui-extensions/preact";
 import { render } from "preact";
 import { useEffect, useState, useRef } from "preact/hooks";
 import {
-    useApi,
     useSettings,
     useApplyAttributeChange,
     useApplyShippingAddressChange,
     useShippingAddress,
     useDeliveryGroups,
-    useLanguage,
     useBuyerJourneyIntercept,
     useExtensionCapability,
-    useBuyerJourneyActiveStep,
-    useAttributeValues,
 } from "@shopify/ui-extensions/checkout/preact";
 
-// Export the extension
 export default function extension() {
     render(<Extension />, document.body);
 }
 
-/**
- * Parses address.city which stores "City, District" format.
- * Returns { city, district }
- */
 function parseAddressCity(cityField) {
     if (!cityField) return { city: "", district: "" };
+
     const trimmed = cityField.trim();
+
     if (trimmed.includes(",")) {
         const parts = trimmed.split(",").map((p) => p.trim());
         return {
@@ -34,6 +27,7 @@ function parseAddressCity(cityField) {
             district: parts[parts.length - 1],
         };
     }
+
     return { city: trimmed, district: "" };
 }
 
@@ -44,12 +38,24 @@ function Extension() {
     const ApplyShippingAddressChange = useApplyShippingAddressChange();
     const settings = useSettings();
 
+    console.log("address", address);
+
+    const userInteracted = useRef(false);
+    const isRestoringFromAddress = useRef(false);
+    const ignoreAddressSyncUntil = useRef(0);
+
     const settingsCountryCode = String(settings?.country_code || "")
         .trim()
         .toUpperCase();
+
     const addressCountryCode = String(address?.countryCode || "")
         .trim()
         .toUpperCase();
+
+    const shouldRenderForCountry =
+        Boolean(settingsCountryCode) &&
+        Boolean(addressCountryCode) &&
+        settingsCountryCode === addressCountryCode;
 
     const lastSeenCountryCode = useRef(addressCountryCode);
     const countryChangedAt = useRef(Date.now());
@@ -61,10 +67,6 @@ function Extension() {
     }, [addressCountryCode]);
 
     const isCountryStable = Date.now() - countryChangedAt.current > 350;
-    const shouldRenderForCountry =
-        Boolean(settingsCountryCode) &&
-        Boolean(addressCountryCode) &&
-        settingsCountryCode === addressCountryCode;
 
     /**
      * Dynamically resolve which delivery group index is currently active by
@@ -76,7 +78,9 @@ function Extension() {
         if (!deliveryGroups?.length) return 0;
         const idx = deliveryGroups.findIndex(
             (g) =>
+                // @ts-ignore - deliveryAddress is valid on DeliveryGroup per Shopify API
                 g?.deliveryAddress?.provinceCode === address?.provinceCode &&
+                // @ts-ignore - deliveryAddress is valid on DeliveryGroup per Shopify API
                 g?.deliveryAddress?.zip === address?.zip
         );
         return idx !== -1 ? idx : 0;
@@ -119,7 +123,6 @@ function Extension() {
      * When true, the next region/city/district useEffect cascade should
      * restore from the current address instead of resetting child fields.
      */
-    const isRestoringFromAddress = useRef(false);
 
     const canBlockProgress = useExtensionCapability("block_progress");
 
@@ -162,27 +165,38 @@ function Extension() {
         setSelectedRegion(province);
 
         if (province && loadedData.length > 0) {
-            // Cities for this region
             const regionData = loadedData.filter(
                 (loc) =>
                     loc?.region_code === province || loc?.Region === province
             );
+
             const sortedCities = [
                 ...new Set(regionData.map((loc) => loc?.city)),
             ].sort((a, b) => a.localeCompare(b));
+
             setCities(sortedCities);
-            setSelectedCity(parsedCity);
+
+            if (parsedCity && sortedCities.includes(parsedCity)) {
+                setSelectedCity(parsedCity);
+            }
 
             if (parsedCity) {
-                // Districts for this city
                 const cityData = regionData.filter(
                     (loc) => loc?.city === parsedCity
                 );
+
                 const sortedDistricts = [
                     ...new Set(cityData.map((loc) => loc?.district)),
                 ].sort((a, b) => a.localeCompare(b));
+
                 setDistricts(sortedDistricts);
-                setSelectedDistrict(parsedDistrict);
+
+                if (
+                    parsedDistrict &&
+                    sortedDistricts.includes(parsedDistrict)
+                ) {
+                    setSelectedDistrict(parsedDistrict);
+                }
             } else {
                 setDistricts([]);
                 setSelectedDistrict("");
@@ -201,6 +215,10 @@ function Extension() {
         setSelectedCityErr("");
         setSelectedDistrictErr("");
         setSelectedZipcodeErr("");
+
+        setTimeout(() => {
+            isRestoringFromAddress.current = false;
+        }, 0);
     };
 
     // ─── Intercept / Validation ──────────────────────────────────────────────
@@ -362,7 +380,6 @@ function Extension() {
     // ─── Detect external address change (user selected a different saved address)
     useEffect(() => {
         if (!shouldRenderForCountry) return;
-        // Skip if data hasn't loaded yet
         if (data.length === 0) return;
 
         const incomingProvince = address?.provinceCode || "";
@@ -376,6 +393,8 @@ function Extension() {
             incomingCity === lastAppliedCity.current &&
             incomingZip === lastAppliedZip.current;
 
+        if (Date.now() < ignoreAddressSyncUntil.current) return;
+
         if (weChangedIt) return;
 
         restoreFromAddress(address, data);
@@ -386,39 +405,6 @@ function Extension() {
         lastAppliedZip.current = incomingZip;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [address?.provinceCode, address?.city, address?.zip]);
-
-    // ─── Side effects: sync selections → Shopify address ────────────────────
-
-    // Sync region → Shopify (only when NOT restoring)
-    useEffect(() => {
-        if (!shouldRenderForCountry) return;
-        if (!selectedRegion) return;
-        if (isRestoringFromAddress.current) return; // skip during restore
-
-        applyAttributeChange({
-            type: "updateAttribute",
-            key: String(settings?.target_save_note_key_for_Region || "Region"),
-            value: selectedRegion,
-        });
-
-        if (selectedRegion !== address?.provinceCode) {
-            const newProvince = selectedRegion;
-            lastAppliedProvince.current = newProvince;
-            lastAppliedCity.current = "";
-            lastAppliedZip.current = "";
-
-            ApplyShippingAddressChange({
-                type: "updateShippingAddress",
-                address: {
-                    ...address,
-                    provinceCode: newProvince,
-                    city: "",
-                    zip: "",
-                },
-            });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedRegion]);
 
     // Sync zipcode → Shopify (only when NOT restoring)
     useEffect(() => {
@@ -444,7 +430,12 @@ function Extension() {
 
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
-                address: { ...address, zip: selectedZipcode, city: fullCity },
+                address: {
+                    ...address,
+                    zip: selectedZipcode,
+                    city: fullCity,
+                    countryCode: address?.countryCode,
+                },
             });
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -468,10 +459,11 @@ function Extension() {
     // ─── Step 2: When region changes → update cities ──────────────────────────
     useEffect(() => {
         if (!shouldRenderForCountry) return;
-        // During a restore we manage cities ourselves in restoreFromAddress()
         if (isRestoringFromAddress.current) return;
 
         if (!selectedRegion || data.length === 0) {
+            if (!userInteracted.current) return;
+
             setCities([]);
             setSelectedCity("");
             setSelectedDistrict("");
@@ -485,26 +477,18 @@ function Extension() {
                 loc?.region_code === selectedRegion ||
                 loc?.Region === selectedRegion
         );
+
         const sortedCities = [
             ...new Set(regionData.map((loc) => loc?.city)),
         ].sort((a, b) => a.localeCompare(b));
+
         setCities(sortedCities);
-        // User changed region manually — clear dependent fields
-        setSelectedCity("");
-        setSelectedDistrict("");
-        setSelectedZipcode("");
-        setDistricts([]);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedRegion, data]);
 
     // ─── Step 3: When city changes → update districts ─────────────────────────
     useEffect(() => {
         if (!shouldRenderForCountry) return;
-        // During a restore we manage districts ourselves in restoreFromAddress()
         if (isRestoringFromAddress.current) return;
-
-        setSelectedDistrict("");
-        setSelectedZipcode("");
 
         if (!selectedCity || !selectedRegion || data.length === 0) {
             setDistricts([]);
@@ -521,7 +505,6 @@ function Extension() {
             ...new Set(cityData.map((loc) => loc?.district)),
         ].sort((a, b) => a.localeCompare(b));
         setDistricts(sortedDistricts);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCity, selectedRegion, data]);
 
     // ─── Step 4: When district changes → auto-populate zipcode ───────────────
@@ -552,12 +535,45 @@ function Extension() {
     // ─── Handlers ─────────────────────────────────────────────────────────────
 
     const handleRegionChange = (event) => {
+        userInteracted.current = true;
+
         const value = event?.target?.value || event;
         setSelectedRegion(value);
         setSelectedRegionErr("");
+
+        applyAttributeChange({
+            type: "updateAttribute",
+            key: String(settings?.target_save_note_key_for_Region || "Region"),
+            value: value,
+        });
+
+        if (value !== address?.provinceCode) {
+            const newProvince = value;
+            lastAppliedProvince.current = newProvince;
+            lastAppliedCity.current = "";
+            lastAppliedZip.current = "";
+
+            ApplyShippingAddressChange({
+                type: "updateShippingAddress",
+                address: {
+                    ...address,
+                    provinceCode: newProvince,
+                    city: "",
+                    zip: "",
+                    countryCode: address?.countryCode,
+                },
+            });
+        }
+
+        setSelectedCity("");
+        setSelectedDistrict("");
+        setSelectedZipcode("");
+        setDistricts([]);
     };
 
     const handleCityChange = (event) => {
+        userInteracted.current = true;
+
         const value = event?.target?.value || event;
         setSelectedCity(value);
         setSelectedCityErr("");
@@ -570,22 +586,35 @@ function Extension() {
             lastAppliedCity.current = fullCity;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
-                address: { ...address, city: value },
+                address: {
+                    ...address,
+                    city: value,
+                    countryCode: address?.countryCode,
+                },
             });
         }
+
+        setSelectedDistrict("");
+        setSelectedZipcode("");
     };
 
     const handleDistrictChange = (event) => {
         const value = event?.target?.value || event;
+
         setSelectedDistrict(value);
         setSelectedDistrictErr("");
 
         if (selectedCity && value) {
             const fullCity = `${selectedCity}, ${value}`;
             lastAppliedCity.current = fullCity;
+            ignoreAddressSyncUntil.current = Date.now() + 800;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
-                address: { ...address, city: fullCity },
+                address: {
+                    ...address,
+                    city: fullCity,
+                    countryCode: address?.countryCode,
+                },
             });
         }
     };
@@ -630,8 +659,9 @@ function Extension() {
                     ) : (
                         <s-grid gridTemplateColumns="1fr 1fr" gap="base">
                             <s-select
+                                key={`region-${regions.length}`}
                                 label={String(regionLabel)}
-                                value={selectedRegion}
+                                value={selectedRegion || ""}
                                 required={canBlockProgress}
                                 error={selectedRegionErr}
                                 onChange={handleRegionChange}
@@ -647,8 +677,9 @@ function Extension() {
                             </s-select>
 
                             <s-select
+                                key={`city-${cities.length}`}
                                 label={String(cityLabel)}
-                                value={selectedCity}
+                                value={selectedCity || ""}
                                 required={canBlockProgress}
                                 error={selectedCityErr}
                                 disabled={
@@ -664,8 +695,9 @@ function Extension() {
                             </s-select>
 
                             <s-select
+                                key={`district-${districts.length}`}
                                 label={String(districtLabel)}
-                                value={selectedDistrict}
+                                value={selectedDistrict || ""}
                                 required={canBlockProgress}
                                 error={selectedDistrictErr}
                                 disabled={
