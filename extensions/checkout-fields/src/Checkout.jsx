@@ -15,22 +15,6 @@ export default function extension() {
     render(<Extension />, document.body);
 }
 
-function parseAddressCity(cityField) {
-    if (!cityField) return { city: "", district: "" };
-
-    const trimmed = cityField.trim();
-
-    if (trimmed.includes(",")) {
-        const parts = trimmed.split(",").map((p) => p.trim());
-        return {
-            city: parts.slice(0, -1).join(",").trim(),
-            district: parts[parts.length - 1],
-        };
-    }
-
-    return { city: trimmed, district: "" };
-}
-
 function Extension() {
     const address = useShippingAddress();
     const deliveryGroups = useDeliveryGroups();
@@ -38,11 +22,10 @@ function Extension() {
     const ApplyShippingAddressChange = useApplyShippingAddressChange();
     const settings = useSettings();
 
-    console.log("address", address);
-
     const userInteracted = useRef(false);
     const isRestoringFromAddress = useRef(false);
     const ignoreAddressSyncUntil = useRef(0);
+    const lastAppliedAddress2 = useRef("");
 
     const settingsCountryCode = String(settings?.country_code || "")
         .trim()
@@ -156,9 +139,8 @@ function Extension() {
         isRestoringFromAddress.current = true;
 
         const province = addr.provinceCode || "";
-        const { city: parsedCity, district: parsedDistrict } = parseAddressCity(
-            addr.city || ""
-        );
+        const parsedCity = (addr.city || "").trim();
+        const parsedDistrict = (addr.address2 || "").trim();
         const zip = addr.zip || "";
 
         // --- Regions (already set by the load effect, but be safe) ---
@@ -234,9 +216,7 @@ function Extension() {
         // 1. Region check
         if (!selectedRegion && regions.length > 0) {
             setSelectedRegionErr("Region is required");
-            setSelectedCityErr("City is required");
-            setSelectedDistrictErr("Barangay is required");
-            setSelectedZipcodeErr("Zip Code is required");
+            // ✅ Don't pre-emptively error on fields not yet reachable
             return { behavior: "block", reason: "Region is required" };
         }
 
@@ -266,25 +246,38 @@ function Extension() {
         // 2. City check
         if (!selectedCity && cities.length > 0) {
             setSelectedCityErr("City is required");
-            setSelectedDistrictErr("Barangay is required");
-            setSelectedZipcodeErr("Zip Code is required");
+            // ✅ Don't cascade errors to district/zip yet
             return { behavior: "block", reason: "City is required" };
         }
 
         // 3. District check
         if (!selectedDistrict && districts.length > 0) {
             setSelectedDistrictErr("Barangay is required");
-            setSelectedZipcodeErr("Zip Code is required");
+            // ✅ Zip auto-fills from district, so no need to pre-error it
             return { behavior: "block", reason: "Barangay is required" };
+        }
+
+        if (
+            selectedDistrict &&
+            address?.address2 &&
+            address.address2 !== selectedDistrict
+        ) {
+            return {
+                behavior: "block",
+                reason: "Address line 2 doesn't match the selected Barangay.",
+                errors: [
+                    {
+                        message:
+                            "Address Line 2 must match the selected Barangay.",
+                        target: `$.cart.deliveryGroups[${activeDeliveryGroupIndex}].deliveryAddress.address2`,
+                    },
+                ],
+            };
         }
 
         // 4. Validate address.city matches our "City, District" format
         if (selectedCity) {
-            const expectedAddressCity = selectedDistrict
-                ? `${selectedCity}, ${selectedDistrict}`
-                : selectedCity;
-
-            if (address?.city && address.city !== expectedAddressCity) {
+            if (address?.city && address.city !== selectedCity) {
                 return {
                     behavior: "block",
                     reason: "Address city doesn't match the selected location.",
@@ -368,6 +361,7 @@ function Extension() {
                 lastAppliedProvince.current = address?.provinceCode || "";
                 lastAppliedCity.current = address?.city || "";
                 lastAppliedZip.current = address?.zip || "";
+                lastAppliedAddress2.current = address?.address2 || "";
             })
             .catch((err) => {
                 console.error("Error fetching address data:", err);
@@ -385,13 +379,15 @@ function Extension() {
         const incomingProvince = address?.provinceCode || "";
         const incomingCity = address?.city || "";
         const incomingZip = address?.zip || "";
+        const incomingAddress2 = address?.address2 || "";
 
         // If the incoming address matches what we last applied, this change
         // was caused by our own code — ignore it.
         const weChangedIt =
             incomingProvince === lastAppliedProvince.current &&
             incomingCity === lastAppliedCity.current &&
-            incomingZip === lastAppliedZip.current;
+            incomingZip === lastAppliedZip.current &&
+            incomingAddress2 === lastAppliedAddress2.current;
 
         if (Date.now() < ignoreAddressSyncUntil.current) return;
 
@@ -403,8 +399,9 @@ function Extension() {
         lastAppliedProvince.current = incomingProvince;
         lastAppliedCity.current = incomingCity;
         lastAppliedZip.current = incomingZip;
+        lastAppliedAddress2.current = incomingAddress2;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [address?.provinceCode, address?.city, address?.zip]);
+    }, [address?.provinceCode, address?.city, address?.zip, address?.address2]);
 
     // Sync zipcode → Shopify (only when NOT restoring)
     useEffect(() => {
@@ -420,20 +417,22 @@ function Extension() {
             value: selectedZipcode,
         });
 
-        const fullCity = selectedDistrict
-            ? `${selectedCity}, ${selectedDistrict}`
-            : selectedCity;
-
-        if (selectedZipcode !== address?.zip || fullCity !== address?.city) {
+        if (
+            selectedZipcode !== address?.zip ||
+            selectedCity !== address?.city ||
+            selectedDistrict !== address?.address2
+        ) {
             lastAppliedZip.current = selectedZipcode;
-            lastAppliedCity.current = fullCity;
+            lastAppliedCity.current = selectedCity;
+            lastAppliedAddress2.current = selectedDistrict;
 
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: {
                     ...address,
                     zip: selectedZipcode,
-                    city: fullCity,
+                    city: selectedCity, // clean city only
+                    address2: selectedDistrict, // district in address2
                     countryCode: address?.countryCode,
                 },
             });
@@ -552,6 +551,7 @@ function Extension() {
             lastAppliedProvince.current = newProvince;
             lastAppliedCity.current = "";
             lastAppliedZip.current = "";
+            lastAppliedAddress2.current = "";
 
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
@@ -560,6 +560,7 @@ function Extension() {
                     provinceCode: newProvince,
                     city: "",
                     zip: "",
+                    address2: "",
                     countryCode: address?.countryCode,
                 },
             });
@@ -578,17 +579,14 @@ function Extension() {
         setSelectedCity(value);
         setSelectedCityErr("");
 
-        const fullCity = value
-            ? `${value}${selectedDistrict ? `, ${selectedDistrict}` : ""}`
-            : "";
-
-        if (fullCity !== address?.city) {
-            lastAppliedCity.current = fullCity;
+        if (value !== address?.city) {
+            lastAppliedCity.current = value;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: {
                     ...address,
                     city: value,
+                    address2: "", // clear district when city changes
                     countryCode: address?.countryCode,
                 },
             });
@@ -600,19 +598,18 @@ function Extension() {
 
     const handleDistrictChange = (event) => {
         const value = event?.target?.value || event;
-
         setSelectedDistrict(value);
         setSelectedDistrictErr("");
 
         if (selectedCity && value) {
-            const fullCity = `${selectedCity}, ${value}`;
-            lastAppliedCity.current = fullCity;
+            lastAppliedAddress2.current = value;
             ignoreAddressSyncUntil.current = Date.now() + 800;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: {
                     ...address,
-                    city: fullCity,
+                    city: selectedCity, // city stays clean
+                    address2: value, // district goes here
                     countryCode: address?.countryCode,
                 },
             });
@@ -677,7 +674,7 @@ function Extension() {
                             </s-select>
 
                             <s-select
-                                key={`city-${cities.length}`}
+                                key={`city-${selectedRegion}`}
                                 label={String(cityLabel)}
                                 value={selectedCity || ""}
                                 required={canBlockProgress}
@@ -695,7 +692,7 @@ function Extension() {
                             </s-select>
 
                             <s-select
-                                key={`district-${districts.length}`}
+                                key={`district-${selectedCity}`}
                                 label={String(districtLabel)}
                                 value={selectedDistrict || ""}
                                 required={canBlockProgress}
