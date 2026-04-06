@@ -9,6 +9,19 @@ use Illuminate\Http\Request;
 
 class HelperController extends Controller
 {
+   public function getShop($request)
+    {
+        $session_obj = $request->get('shopifySession');
+        if ($session_obj) {
+            $session = Session::where('shop', $session_obj->getShop())->first();
+        } else {
+            $session = Session::where('shop', 'asadtest321.myshopify.com')->first();
+            if ($session == null) {
+                $session = Session::first();
+            }
+        }
+        return $session;
+    }
     public function getShopApi($shop_name)
     {
         $session = Session::where('shop',$shop_name)->first();
@@ -25,5 +38,69 @@ class HelperController extends Controller
         $api->setSession(new \Gnikyt\BasicShopifyAPI\Session($session->shop));
 
         return $api;
+    }
+
+    public function createStorefrontToken($session) {
+
+        $query = <<<QUERY
+        mutation StorefrontAccessTokenCreate(\$input: StorefrontAccessTokenInput!) {
+          storefrontAccessTokenCreate(input: \$input) {
+            userErrors {
+              field
+              message
+            }
+            shop {
+              id
+            }
+            storefrontAccessToken {
+              accessScopes {
+                handle
+              }
+              accessToken
+              title
+            }
+          }
+        }
+        QUERY;
+
+            $variable = [
+                "input" => [
+                    "title"=> "lego-gwp"
+                ]
+            ];
+
+
+            return $this->getShopApi($session->shop)->graph($query,$variable);
+
+    }
+
+    public function getStorefrontToken($session) {
+
+        $query = <<<QUERY
+        query storefrontAccessTokensList(\$first: Int!) {
+         shop {
+           storefrontAccessTokens(first: \$first) {
+             edges {
+               node {
+                 id
+                 accessToken
+                 accessScopes {
+                   handle
+                 }
+                 createdAt
+                 title
+               }
+             }
+           }
+         }
+       }
+       QUERY;
+
+       $variable = [
+           "first"=>50
+       ];
+
+           return $this->getShopApi($session->shop)->graph($query,$variable);
+
     }
 }

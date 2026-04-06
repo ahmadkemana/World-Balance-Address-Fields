@@ -17,6 +17,7 @@ class CreateSessionsTable extends Migration
             $table->id();
             $table->string('session_id')->nullable(false)->unique();
             $table->string('shop')->nullable(false);
+            $table->text('storefront_token')->nullable();
             $table->boolean('is_online')->nullable(false);
             $table->string('state')->nullable(false);
             $table->timestamps();
