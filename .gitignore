@@ -4,6 +4,7 @@
 /web/storage/*.key
 /web/storage/db.sqlite
 /web/vendor
+/extensions/checkout-fields/shopify.extension.toml
 /web/composer.lock
 .env
 .env.*
