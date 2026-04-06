@@ -31,7 +31,7 @@ class DashboardController extends Controller
                     foreach($tokens as $token){
                          if(isset($token->node)
                             && isset($token->node->title)
-                            && $token->node->title == 'lego-gwp'){
+                            && $token->node->title == 'web-checkout-address'){
                             $session->storefront_token = $token->node->accessToken;
                             $session->save();
                         }
