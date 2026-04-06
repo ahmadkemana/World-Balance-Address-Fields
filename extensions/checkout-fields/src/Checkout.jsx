@@ -220,24 +220,15 @@ function Extension() {
             return { behavior: "block", reason: "Region is required" };
         }
 
-        if (selectedRegion && selectedRegion !== address?.provinceCode) {
-            const dg = `$.cart.deliveryGroups[${activeDeliveryGroupIndex}].deliveryAddress`;
+        if (selectedRegion && address?.provinceCode && String(selectedRegion).trim().toLowerCase() !== String(address.provinceCode).trim().toLowerCase()) {
+            const dg = `$.cart.deliveryGroups[${activeDeliveryGroupIndex}]`;
             return {
                 behavior: "block",
                 reason: "Region doesn't match the selected location.",
                 errors: [
                     {
                         message: "Region doesn't match the selected location.",
-                        target: `${dg}.provinceCode`,
-                    },
-                    {
-                        message: "City doesn't match the selected location.",
-                        target: `${dg}.city`,
-                    },
-                    {
-                        message:
-                            "ZIP Code doesn't match the selected location.",
-                        target: `${dg}.zip`,
+                        target: `${dg}.deliveryAddress.provinceCode`,
                     },
                 ],
             };
@@ -260,7 +251,7 @@ function Extension() {
         if (
             selectedDistrict &&
             address?.address2 &&
-            address.address2 !== selectedDistrict
+            String(address.address2).trim().toLowerCase() !== String(selectedDistrict).trim().toLowerCase()
         ) {
             return {
                 behavior: "block",
@@ -277,7 +268,7 @@ function Extension() {
 
         // 4. Validate address.city matches our "City, District" format
         if (selectedCity) {
-            if (address?.city && address.city !== selectedCity) {
+            if (address?.city && String(address.city).trim().toLowerCase() !== String(selectedCity).trim().toLowerCase()) {
                 return {
                     behavior: "block",
                     reason: "Address city doesn't match the selected location.",
@@ -301,7 +292,7 @@ function Extension() {
         if (
             selectedZipcode &&
             address?.zip &&
-            selectedZipcode !== address.zip
+            String(selectedZipcode).trim().toLowerCase() !== String(address.zip).trim().toLowerCase()
         ) {
             return {
                 behavior: "block",
@@ -393,7 +384,17 @@ function Extension() {
 
         if (weChangedIt) return;
 
-        restoreFromAddress(address, data);
+        // ── Only restore if province OR city changed (user picked a different
+        //    saved address). If only zip/address2 changed (user manually edited
+        //    the native field), do NOT wipe extension dropdowns — just update
+        //    the snapshot so the next real change is detected correctly.
+        const provinceOrCityChanged =
+            incomingProvince !== lastAppliedProvince.current ||
+            incomingCity !== lastAppliedCity.current;
+
+        if (provinceOrCityChanged) {
+            restoreFromAddress(address, data);
+        }
 
         // Update our "last applied" snapshot
         lastAppliedProvince.current = incomingProvince;
@@ -406,8 +407,7 @@ function Extension() {
     // Sync zipcode → Shopify (only when NOT restoring)
     useEffect(() => {
         if (!shouldRenderForCountry) return;
-        if (!selectedZipcode) return;
-        if (isRestoringFromAddress.current) return; // skip during restore
+        if (isRestoringFromAddress.current) return;
 
         applyAttributeChange({
             type: "updateAttribute",
@@ -418,24 +418,15 @@ function Extension() {
         });
 
         if (
-            selectedZipcode !== address?.zip ||
-            selectedCity !== address?.city ||
-            selectedDistrict !== address?.address2
+            String(selectedZipcode || "") !== String(address?.zip || "") ||
+            String(selectedCity || "") !== String(address?.city || "") ||
+            String(selectedDistrict || "") !== String(address?.address2 || "")
         ) {
             lastAppliedZip.current = selectedZipcode;
             lastAppliedCity.current = selectedCity;
             lastAppliedAddress2.current = selectedDistrict;
 
-            ApplyShippingAddressChange({
-                type: "updateShippingAddress",
-                address: {
-                    ...address,
-                    zip: selectedZipcode,
-                    city: selectedCity, // clean city only
-                    address2: selectedDistrict, // district in address2
-                    countryCode: address?.countryCode,
-                },
-            });
+            ignoreAddressSyncUntil.current = Date.now() + 800;
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedZipcode]);
@@ -526,7 +517,7 @@ function Extension() {
                 loc?.district === selectedDistrict
         );
 
-        const newZip = match?.zipcode || "";
+        const newZip = match?.zipcode ? String(match.zipcode) : "";
         setSelectedZipcode(newZip);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDistrict, selectedCity, selectedRegion, data]);
@@ -540,13 +531,17 @@ function Extension() {
         setSelectedRegion(value);
         setSelectedRegionErr("");
 
+        setSelectedCityErr("");
+        setSelectedDistrictErr("");
+        setSelectedZipcodeErr("");
+
         applyAttributeChange({
             type: "updateAttribute",
             key: String(settings?.target_save_note_key_for_Region || "Region"),
             value: value,
         });
 
-        if (value !== address?.provinceCode) {
+        if (String(value) !== String(address?.provinceCode || "")) {
             const newProvince = value;
             lastAppliedProvince.current = newProvince;
             lastAppliedCity.current = "";
@@ -558,9 +553,6 @@ function Extension() {
                 address: {
                     ...address,
                     provinceCode: newProvince,
-                    city: "",
-                    zip: "",
-                    address2: "",
                     countryCode: address?.countryCode,
                 },
             });
@@ -570,6 +562,7 @@ function Extension() {
         setSelectedDistrict("");
         setSelectedZipcode("");
         setDistricts([]);
+
     };
 
     const handleCityChange = (event) => {
@@ -579,14 +572,19 @@ function Extension() {
         setSelectedCity(value);
         setSelectedCityErr("");
 
-        if (value !== address?.city) {
+        if (String(value) !== String(address?.city || "")) {
             lastAppliedCity.current = value;
+            lastAppliedAddress2.current = ""; // keep snapshot in sync
+            lastAppliedZip.current = ""; // keep snapshot in sync
+
+            ignoreAddressSyncUntil.current = Date.now() + 800;
+
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: {
                     ...address,
+                    provinceCode: selectedRegion || address?.provinceCode || "",
                     city: value,
-                    address2: "", // clear district when city changes
                     countryCode: address?.countryCode,
                 },
             });
@@ -601,15 +599,27 @@ function Extension() {
         setSelectedDistrict(value);
         setSelectedDistrictErr("");
 
+        const match = data.find(
+            (loc) =>
+                (loc?.region_code === selectedRegion ||
+                    loc?.Region === selectedRegion) &&
+                loc?.city === selectedCity &&
+                loc?.district === value
+        );
+        const newZip = match?.zipcode ? String(match.zipcode) : "";
+
         if (selectedCity && value) {
             lastAppliedAddress2.current = value;
+            lastAppliedZip.current = newZip;
             ignoreAddressSyncUntil.current = Date.now() + 800;
             ApplyShippingAddressChange({
                 type: "updateShippingAddress",
                 address: {
                     ...address,
+                    provinceCode: selectedRegion || address?.provinceCode || "",
                     city: selectedCity, // city stays clean
                     address2: value, // district goes here
+                    zip: newZip,
                     countryCode: address?.countryCode,
                 },
             });

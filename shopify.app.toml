@@ -1,12 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "8b48ab19ac5deaf1ec3b88e1b67edcbf"
-name = "World Balance Address Fields"
+client_id = "a5835e54be9d507b217843d0d12ecf8b"
+name = "WB Checkout Address+"
 application_url = "https://example.com"
 embedded = true
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -16,6 +16,3 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ ]
-
-[build]
-automatically_update_urls_on_dev = false
