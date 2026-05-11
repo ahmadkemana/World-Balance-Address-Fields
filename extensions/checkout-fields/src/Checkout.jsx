@@ -69,6 +69,21 @@ function Extension() {
         return idx !== -1 ? idx : 0;
     })();
 
+
+    /**
+     * Detect pickup: selectedDeliveryOption only carries `handle` — not `type`.
+     * We look up the full option from deliveryOptions using the handle.
+     */
+    const activeGroup = deliveryGroups?.[activeDeliveryGroupIndex];
+    const selectedHandle = activeGroup?.selectedDeliveryOption?.handle;
+    const selectedOption = activeGroup?.deliveryOptions?.find(
+        (opt) => opt.handle === selectedHandle
+    );
+
+    const isPickup =
+        selectedOption?.type === "pickup" ||
+        selectedOption?.type === "local";
+
     const blockTitle = settings?.block_title || "Address Fields";
     const regionLabel = settings?.region_label || "Region";
     const cityLabel = settings?.city_label || "City";
@@ -206,6 +221,9 @@ function Extension() {
     // ─── Intercept / Validation ──────────────────────────────────────────────
     useBuyerJourneyIntercept(({ canBlockProgress }) => {
         if (!canBlockProgress) return { behavior: "allow" };
+
+        // Always allow when pickup is selected — no shipping address required
+        if (isPickup) return { behavior: "allow" };
 
         if (!shouldRenderForCountry) return { behavior: "allow" };
 
@@ -627,7 +645,7 @@ function Extension() {
     };
 
     return (
-        shouldRenderForCountry && (
+        shouldRenderForCountry && !isPickup && (
             <s-box border="none">
                 <s-stack direction="block" gap="base">
                     <s-heading>{blockTitle}</s-heading>
