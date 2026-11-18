@@ -21,3 +21,7 @@ yarn-error.log
 
 .idea
 .vscode
+
+# Shopify CLI build artifacts
+extensions/*/manifest.json
+extensions/*/dist/*.metafile.json

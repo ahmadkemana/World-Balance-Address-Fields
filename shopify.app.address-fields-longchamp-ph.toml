@@ -1,0 +1,24 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "719f251490aeefb8b5c311a3fc4e0337"
+application_url = "https://example.com"
+embedded = true
+name = "Address Fields Longchamp (PH)"
+
+[webhooks]
+api_version = "2026-10"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products,read_inventory,read_locations,read_publications,read_orders,read_customers,write_customers,unauthenticated_read_customers,unauthenticated_write_customers,unauthenticated_read_customer_tags,unauthenticated_read_checkouts,unauthenticated_write_checkouts,unauthenticated_read_content,unauthenticated_read_metaobjects,unauthenticated_read_product_inventory,unauthenticated_read_product_listings,unauthenticated_read_product_pickup_locations,unauthenticated_read_product_tags,unauthenticated_read_selling_plans"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ ]
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = false

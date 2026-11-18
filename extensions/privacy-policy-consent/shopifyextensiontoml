@@ -1,0 +1,42 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "privacy-policy-consent"
+handle = "privacy-policy-consent"
+type = "ui_extension"
+uid = "228156bb-3688-ab5e-efc1-4aa32a46648d508d2944"
+
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.checkout.block.render"
+
+[extensions.capabilities]
+block_progress = true
+api_access = true
+
+[[extensions.metafields]]
+namespace = "custom"
+key = "privacy_policy_consent"
+target = "customer-email"
+# This loads the customer metafield - Shopify will make it available on the customer object
+
+[extensions.settings]
+[[extensions.settings.fields]]
+key = "block_title"
+type = "single_line_text_field"
+name = "Block Title"
+
+[[extensions.settings.fields]]
+key = "checkbox_label"
+type = "single_line_text_field"
+name = "Checkbox Label"
+
+[[extensions.settings.fields]]
+key = "attribute_key"
+type = "single_line_text_field"
+name = "Attribute Key"
+
+[[extensions.settings.fields]]
+key = "accepted_value"
+type = "single_line_text_field"
+name = "Accepted Value"

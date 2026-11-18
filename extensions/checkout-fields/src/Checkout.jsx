@@ -64,11 +64,10 @@ function Extension() {
                 // @ts-ignore - deliveryAddress is valid on DeliveryGroup per Shopify API
                 g?.deliveryAddress?.provinceCode === address?.provinceCode &&
                 // @ts-ignore - deliveryAddress is valid on DeliveryGroup per Shopify API
-                g?.deliveryAddress?.zip === address?.zip
+                g?.deliveryAddress?.zip === address?.zip,
         );
         return idx !== -1 ? idx : 0;
     })();
-
 
     /**
      * Detect pickup: selectedDeliveryOption only carries `handle` — not `type`.
@@ -77,12 +76,11 @@ function Extension() {
     const activeGroup = deliveryGroups?.[activeDeliveryGroupIndex];
     const selectedHandle = activeGroup?.selectedDeliveryOption?.handle;
     const selectedOption = activeGroup?.deliveryOptions?.find(
-        (opt) => opt.handle === selectedHandle
+        (opt) => opt.handle === selectedHandle,
     );
 
     const isPickup =
-        selectedOption?.type === "pickup" ||
-        selectedOption?.type === "local";
+        selectedOption?.type === "pickup" || selectedOption?.type === "local";
 
     const blockTitle = settings?.block_title || "Address Fields";
     const regionLabel = settings?.region_label || "Region";
@@ -164,7 +162,7 @@ function Extension() {
         if (province && loadedData.length > 0) {
             const regionData = loadedData.filter(
                 (loc) =>
-                    loc?.region_code === province || loc?.Region === province
+                    loc?.region_code === province || loc?.Region === province,
             );
 
             const sortedCities = [
@@ -179,7 +177,7 @@ function Extension() {
 
             if (parsedCity) {
                 const cityData = regionData.filter(
-                    (loc) => loc?.city === parsedCity
+                    (loc) => loc?.city === parsedCity,
                 );
 
                 const sortedDistricts = [
@@ -238,7 +236,12 @@ function Extension() {
             return { behavior: "block", reason: "Region is required" };
         }
 
-        if (selectedRegion && address?.provinceCode && String(selectedRegion).trim().toLowerCase() !== String(address.provinceCode).trim().toLowerCase()) {
+        if (
+            selectedRegion &&
+            address?.provinceCode &&
+            String(selectedRegion).trim().toLowerCase() !==
+                String(address.provinceCode).trim().toLowerCase()
+        ) {
             const dg = `$.cart.deliveryGroups[${activeDeliveryGroupIndex}]`;
             return {
                 behavior: "block",
@@ -269,7 +272,8 @@ function Extension() {
         if (
             selectedDistrict &&
             address?.address2 &&
-            String(address.address2).trim().toLowerCase() !== String(selectedDistrict).trim().toLowerCase()
+            String(address.address2).trim().toLowerCase() !==
+                String(selectedDistrict).trim().toLowerCase()
         ) {
             return {
                 behavior: "block",
@@ -286,7 +290,11 @@ function Extension() {
 
         // 4. Validate address.city matches our "City, District" format
         if (selectedCity) {
-            if (address?.city && String(address.city).trim().toLowerCase() !== String(selectedCity).trim().toLowerCase()) {
+            if (
+                address?.city &&
+                String(address.city).trim().toLowerCase() !==
+                    String(selectedCity).trim().toLowerCase()
+            ) {
                 return {
                     behavior: "block",
                     reason: "Address city doesn't match the selected location.",
@@ -310,7 +318,8 @@ function Extension() {
         if (
             selectedZipcode &&
             address?.zip &&
-            String(selectedZipcode).trim().toLowerCase() !== String(address.zip).trim().toLowerCase()
+            String(selectedZipcode).trim().toLowerCase() !==
+                String(address.zip).trim().toLowerCase()
         ) {
             return {
                 behavior: "block",
@@ -343,7 +352,7 @@ function Extension() {
             .then((r) => r.json())
             .then((jsonData) => {
                 const filteredData = jsonData.filter(
-                    (item) => item?.country_id === address?.countryCode
+                    (item) => item?.country_id === address?.countryCode,
                 );
                 setData(filteredData);
 
@@ -356,8 +365,8 @@ function Extension() {
                                 item?.Region ||
                                 "Unknown Region";
                             return [value, { value, label }];
-                        })
-                    ).values()
+                        }),
+                    ).values(),
                 ).sort((a, b) => a.label.localeCompare(b.label));
 
                 setRegions(uniqueRegions);
@@ -430,7 +439,7 @@ function Extension() {
         applyAttributeChange({
             type: "updateAttribute",
             key: String(
-                settings?.target_save_note_key_for_zipcode || "Zip Code"
+                settings?.target_save_note_key_for_zipcode || "Zip Code",
             ),
             value: selectedZipcode,
         });
@@ -483,7 +492,7 @@ function Extension() {
         const regionData = data.filter(
             (loc) =>
                 loc?.region_code === selectedRegion ||
-                loc?.Region === selectedRegion
+                loc?.Region === selectedRegion,
         );
 
         const sortedCities = [
@@ -507,7 +516,7 @@ function Extension() {
             (loc) =>
                 (loc?.region_code === selectedRegion ||
                     loc?.Region === selectedRegion) &&
-                loc?.city === selectedCity
+                loc?.city === selectedCity,
         );
         const sortedDistricts = [
             ...new Set(cityData.map((loc) => loc?.district)),
@@ -532,7 +541,7 @@ function Extension() {
                 (loc?.region_code === selectedRegion ||
                     loc?.Region === selectedRegion) &&
                 loc?.city === selectedCity &&
-                loc?.district === selectedDistrict
+                loc?.district === selectedDistrict,
         );
 
         const newZip = match?.zipcode ? String(match.zipcode) : "";
@@ -580,7 +589,6 @@ function Extension() {
         setSelectedDistrict("");
         setSelectedZipcode("");
         setDistricts([]);
-
     };
 
     const handleCityChange = (event) => {
@@ -622,7 +630,7 @@ function Extension() {
                 (loc?.region_code === selectedRegion ||
                     loc?.Region === selectedRegion) &&
                 loc?.city === selectedCity &&
-                loc?.district === value
+                loc?.district === value,
         );
         const newZip = match?.zipcode ? String(match.zipcode) : "";
 
@@ -645,7 +653,8 @@ function Extension() {
     };
 
     return (
-        shouldRenderForCountry && !isPickup && (
+        shouldRenderForCountry &&
+        !isPickup && (
             <s-box border="none">
                 <s-stack direction="block" gap="base">
                     <s-heading>{blockTitle}</s-heading>

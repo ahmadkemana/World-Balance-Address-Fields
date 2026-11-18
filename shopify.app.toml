@@ -3,9 +3,7 @@
 client_id = "a5835e54be9d507b217843d0d12ecf8b"
 name = "WB Checkout Address+"
 application_url = "https://phpstack-1046663-6331029.cloudwaysapps.com/"
-application_url = "https://phpstack-1046663-6331029.cloudwaysapps.com/"
 embedded = true
-handle = "web-checkout-address"
 handle = "web-checkout-address"
 
 [webhooks]
@@ -13,8 +11,7 @@ api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products,read_inventory,read_locations,read_publications,read_orders,read_customers,unauthenticated_read_customers,unauthenticated_write_customers,unauthenticated_read_customer_tags"
-scopes = "read_products,read_inventory,read_locations,read_publications,read_orders,read_customers,unauthenticated_read_customers,unauthenticated_write_customers,unauthenticated_read_customer_tags"
+scopes = "read_products,read_inventory,read_locations,read_publications,read_orders,read_customers,write_customers,unauthenticated_read_customers,unauthenticated_write_customers,unauthenticated_read_customer_tags,unauthenticated_read_checkouts,unauthenticated_write_checkouts,unauthenticated_read_content,unauthenticated_read_metaobjects,unauthenticated_read_product_inventory,unauthenticated_read_product_listings,unauthenticated_read_product_pickup_locations,unauthenticated_read_product_tags,unauthenticated_read_selling_plans"
 
 [auth]
 redirect_urls = [
